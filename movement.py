@@ -323,20 +323,27 @@ def screen_scan(screenshot, grid):
     return hashes, empty_slots
 
 def reload():
+    global chests, known_hashes
+    print(len(chests))
     if True:
         with open('chests.json', 'r') as f:
-            chests = json.load(f)
+            chests = json.load(f)        
+        known_hashes = set()
+        for chest in chests:
+            known_hashes.update(chest)
 
 time.sleep(1)
 current = 0
 layers = 10
 while True:
+    print(len(chests))
     for i in range(0, layers*3):
         move_from_to(current, i)
         current = i
         interact()
         click_sort_button()
         reload()
+        click_sort_button()
         screenshot(current)
         interact()
 
@@ -346,6 +353,7 @@ while True:
         interact()
         click_sort_button()
         reload()
+        click_sort_button()
         screenshot(current)
         interact()
         

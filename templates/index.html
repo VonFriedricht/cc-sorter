@@ -83,9 +83,20 @@
         .dialog-content button {
             margin: 5px;
         }
+        /* Neue Styles für die Navigationsbuttons */
+        .chest-navigation {
+            margin-bottom: 10px;
+        }
+        .chest-navigation button {
+            margin-right: 5px;
+        }
+        .chest-navigation span {
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
+
 <div id="app">
     <h1>Chests Editor</h1>
 
@@ -97,59 +108,58 @@
     <!-- Hauptcontainer -->
     <div class="container">
         <!-- Linke Seite: Unzugeordnete Gegenstände -->
-        <div class="left-panel">
-            <h2>Unzugeordnete Gegenstände</h2>
-            <div
-                class="item-container"
-                @dragover.prevent
-                @drop="dropItem(null)">
-                <div
-                    class="item"
-                    v-for="hash in filteredUnassignedItems"
-                    :key="hash"
-                    :style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
-                    draggable="true"
-                    @dragstart="dragStart(hash, null)"
-                    @click="openAssignDialog(hash)">
-                </div>
-            </div>
-        </div>
+		<div class="left-panel">
+			<h2>Unzugeordnete Gegenstände</h2>
+			<div
+				class="item-container"
+				@dragover.prevent
+				@drop="dropItem(null)">
+				<div
+					class="item"
+					v-for="hash in filteredUnassignedItems"
+					:key="hash"
+					:style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
+					draggable="true"
+					@dragstart="dragStart(hash, null)"
+					@click="moveItemToChest(hash)">
+				</div>
+			</div>
+		</div>
 
-        <!-- Rechte Seite: Ausgewählte Chest -->
-        <div class="right-panel">
-            <!-- Auswahl der Chest -->
-            <div class="chest-select">
-                <label for="chest-select">Wähle eine Chest:</label>
-                <select id="chest-select" v-model.number="activeChestIndex">
-                    <option v-for="(label, index) in chestLabels" :key="index" :value="index">
-                        [[ label ]]
-                    </option>
-                </select>
-                <!-- Button zum Hinzufügen einer neuen Chest -->
-                <button @click="addChest">+ Neue Chest</button>
-                <!-- Button zum Entfernen der aktuellen Chest -->
-                <button @click="removeChest(activeChestIndex)">Chest entfernen</button>
-            </div>
 
-            <!-- Inhalt der ausgewählten Chest -->
-            <div class="chest">
-                <h3>[[ chestLabels[activeChestIndex] ]]</h3>
-                <div
-                    class="item-container"
-                    @dragover.prevent
-                    @drop="dropItem(activeChestIndex)">
-                    <div
-                        class="item"
-                        v-for="hash in filteredChests[activeChestIndex]"
-                        :key="hash"
-                        :style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
-                        draggable="true"
-                        @dragstart="dragStart(hash, activeChestIndex)"
-                        @click="openAssignDialog(hash, activeChestIndex)">
-                    </div>
-                </div>
-            </div>
-        </div>
+		<!-- Rechte Seite: Ausgewählte Kiste -->
+		<div class="right-panel">
+			<!-- Navigation zwischen Kisten -->
+			<div class="chest-navigation">
+				<button @click="previousChest" :disabled="activeChestIndex === 0">Vorherige</button>
+				<button @click="nextChest" :disabled="activeChestIndex === chests.length - 1">Nächste</button>
+				<span>Kiste: [[ chestLabels[activeChestIndex] ]]</span>
+				<!-- Button zum Hinzufügen einer neuen Kiste -->
+				<button @click="addChest">+ Neue Kiste</button>
+				<!-- Button zum Entfernen der aktuellen Kiste -->
+				<button @click="removeChest(activeChestIndex)">Kiste entfernen</button>
+			</div>
+
+			<!-- Inhalt der ausgewählten Kiste -->
+			<div class="chest">
+				<h3>[[ chestLabels[activeChestIndex] ]]</h3>
+				<div
+					class="item-container"
+					@dragover.prevent
+					@drop="dropItem(activeChestIndex)">
+					<div
+						class="item"
+						v-for="hash in filteredChests[activeChestIndex]"
+						:key="hash"
+						:style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
+						draggable="true"
+						@dragstart="dragStart(hash, activeChestIndex)"
+						@click="moveItemToUnassigned(hash)">
+					</div>
+				</div>
+			</div>
+		</div>
+
     </div>
 
     <!-- Dialog zum Zuordnen eines Items -->
@@ -173,7 +183,7 @@
 <script>
     new Vue({
         el: '#app',
-        delimiters: ['[[', ']]'],  // Add this line
+        delimiters: ['[[', ']]'],
         data: {
             chests: {{ chests | tojson }},
             unassignedItems: {{ unassigned_items | tojson }},
@@ -214,6 +224,30 @@
             }
         },
         methods: {
+			moveItemToChest(hash) {
+				// Entferne das Item aus den unzugeordneten Gegenständen
+				const index = this.unassignedItems.indexOf(hash);
+				if (index > -1) {
+					this.unassignedItems.splice(index, 1);
+					// Füge das Item zur aktuellen Kiste hinzu
+					this.chests[this.activeChestIndex].push(hash);
+
+					// Automatisches Speichern
+					this.saveChests();
+				}
+			},
+			moveItemToUnassigned(hash) {
+				// Entferne das Item aus der aktuellen Kiste
+				const index = this.chests[this.activeChestIndex].indexOf(hash);
+				if (index > -1) {
+					this.chests[this.activeChestIndex].splice(index, 1);
+					// Füge das Item zu den unzugeordneten Gegenständen hinzu
+					this.unassignedItems.push(hash);
+
+					// Automatisches Speichern
+					this.saveChests();
+				}
+			},
             dragStart(hash, fromChest) {
                 this.draggedItem = hash;
                 this.draggedFromChest = fromChest;
@@ -259,9 +293,21 @@
                     // Entferne die Chest
                     this.chests.splice(index, 1);
                     // Setze den aktiven Index zurück
-                    this.activeChestIndex = 0;
+                    if (this.activeChestIndex >= this.chests.length) {
+                        this.activeChestIndex = this.chests.length - 1;
+                    }
                     // Automatisches Speichern
                     this.saveChests();
+                }
+            },
+            previousChest() {
+                if (this.activeChestIndex > 0) {
+                    this.activeChestIndex--;
+                }
+            },
+            nextChest() {
+                if (this.activeChestIndex < this.chests.length - 1) {
+                    this.activeChestIndex++;
                 }
             },
             saveChests() {
