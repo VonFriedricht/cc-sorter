@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Chests Editor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        #app {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .container {
+            display: flex;
+            flex: 1;
+        }
+        .left-panel, .right-panel {
+            flex: 1;
+            padding: 10px;
+        }
+        .left-panel {
+            border-right: 1px solid #ccc;
+        }
+        .search-bar {
+            margin-bottom: 10px;
+        }
+        .search-bar input {
+            width: 200px;
+            padding: 5px;
+        }
+        .item-container {
+            display: flex;
+            flex-wrap: wrap;
+            min-height: 100px;
+            border: 1px dashed #ccc;
+            padding: 10px;
+            min-height: 400px;
+            overflow-y: auto;
+        }
+        .item {
+            width: 80px;
+            height: 80px;
+            margin: 5px;
+            background-size: contain;
+            background-position: center;
+            background-repeat: no-repeat;
+            cursor: move;
+            border: 1px solid #ccc;
+        }
+        .chest-select {
+            margin-bottom: 10px;
+        }
+        .chest {
+            padding: 10px;
+        }
+        .chest h3 {
+            margin-top: 0;
+        }
+        /* Styles für den Zuordnungsdialog */
+        .assign-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .dialog-content {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .dialog-content input {
+            width: 50px;
+            text-align: center;
+        }
+        .dialog-content button {
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <h1>Chests Editor</h1>
+
+    <!-- Suchleiste -->
+    <div class="search-bar">
+        <input type="text" v-model="searchQuery" placeholder="Suche...">
+    </div>
+
+    <!-- Hauptcontainer -->
+    <div class="container">
+        <!-- Linke Seite: Unzugeordnete Gegenstände -->
+        <div class="left-panel">
+            <h2>Unzugeordnete Gegenstände</h2>
+            <div
+                class="item-container"
+                @dragover.prevent
+                @drop="dropItem(null)">
+                <div
+                    class="item"
+                    v-for="hash in filteredUnassignedItems"
+                    :key="hash"
+                    :style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
+                    draggable="true"
+                    @dragstart="dragStart(hash, null)"
+                    @click="openAssignDialog(hash)">
+                </div>
+            </div>
+        </div>
+
+        <!-- Rechte Seite: Ausgewählte Chest -->
+        <div class="right-panel">
+            <!-- Auswahl der Chest -->
+            <div class="chest-select">
+                <label for="chest-select">Wähle eine Chest:</label>
+                <select id="chest-select" v-model.number="activeChestIndex">
+                    <option v-for="(label, index) in chestLabels" :key="index" :value="index">
+                        [[ label ]]
+                    </option>
+                </select>
+                <!-- Button zum Hinzufügen einer neuen Chest -->
+                <button @click="addChest">+ Neue Chest</button>
+                <!-- Button zum Entfernen der aktuellen Chest -->
+                <button @click="removeChest(activeChestIndex)">Chest entfernen</button>
+            </div>
+
+            <!-- Inhalt der ausgewählten Chest -->
+            <div class="chest">
+                <h3>[[ chestLabels[activeChestIndex] ]]</h3>
+                <div
+                    class="item-container"
+                    @dragover.prevent
+                    @drop="dropItem(activeChestIndex)">
+                    <div
+                        class="item"
+                        v-for="hash in filteredChests[activeChestIndex]"
+                        :key="hash"
+                        :style="{ backgroundImage: 'url(/static/images/' + hash + '.png)' }"
+                        draggable="true"
+                        @dragstart="dragStart(hash, activeChestIndex)"
+                        @click="openAssignDialog(hash, activeChestIndex)">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialog zum Zuordnen eines Items -->
+    <div v-if="showAssignDialog" class="assign-dialog">
+        <div class="dialog-content">
+            <h3>Item neu zuordnen</h3>
+            <p>Gib die Indexnummer der Ziel-Chest ein:</p>
+            <input type="number" v-model.number="assignChestIndex" min="0" :max="chests.length - 1">
+            <div>
+                <button @click="assignItemToChest">Zuordnen</button>
+                <button @click="closeAssignDialog">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Einbindung von Vue.js -->
+<script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
+<!-- Einbindung von Axios für HTTP-Anfragen -->
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script>
+    new Vue({
+        el: '#app',
+        delimiters: ['[[', ']]'],  // Add this line
+        data: {
+            chests: {{ chests | tojson }},
+            unassignedItems: {{ unassigned_items | tojson }},
+            activeChestIndex: 0,
+            draggedItem: null,
+            draggedFromChest: null,
+            searchQuery: '',
+            showAssignDialog: false,
+            itemToAssign: null,
+            itemToAssignFromChest: null,
+            assignChestIndex: 0
+        },
+        computed: {
+            chestLabels() {
+                // Erstelle die Labels wie "1a", "1b", "1c", "2a", "2b", "2c", ...
+                return this.chests.map((chest, index) => {
+                    const row = Math.floor(index / 3) + 1;
+                    const col = index % 3;
+                    const colLetter = String.fromCharCode(97 + col); // 97 ist 'a' im ASCII
+                    return `${row}${colLetter}`; // Z.B. "1a", "2b"
+                });
+            },
+            filteredChests() {
+                if (this.searchQuery.trim() === '') {
+                    return this.chests;
+                }
+                const query = this.searchQuery.toLowerCase();
+                return this.chests.map(chest => {
+                    return chest.filter(hash => hash.toLowerCase().includes(query));
+                });
+            },
+            filteredUnassignedItems() {
+                if (this.searchQuery.trim() === '') {
+                    return this.unassignedItems;
+                }
+                const query = this.searchQuery.toLowerCase();
+                return this.unassignedItems.filter(hash => hash.toLowerCase().includes(query));
+            }
+        },
+        methods: {
+            dragStart(hash, fromChest) {
+                this.draggedItem = hash;
+                this.draggedFromChest = fromChest;
+            },
+            dropItem(toChest) {
+                if (this.draggedItem !== null) {
+                    // Entferne das Item aus der ursprünglichen Liste
+                    if (this.draggedFromChest === null) {
+                        const index = this.unassignedItems.indexOf(this.draggedItem);
+                        if (index > -1) {
+                            this.unassignedItems.splice(index, 1);
+                        }
+                    } else {
+                        const index = this.chests[this.draggedFromChest].indexOf(this.draggedItem);
+                        if (index > -1) {
+                            this.chests[this.draggedFromChest].splice(index, 1);
+                        }
+                    }
+                    // Füge das Item zur Ziel-Chest oder zu den unassignedItems hinzu
+                    if (toChest === null) {
+                        this.unassignedItems.push(this.draggedItem);
+                    } else {
+                        this.chests[toChest].push(this.draggedItem);
+                    }
+
+                    // Automatisches Speichern
+                    this.saveChests();
+                    // Zurücksetzen der Drag-Daten
+                    this.draggedItem = null;
+                    this.draggedFromChest = null;
+                }
+            },
+            addChest() {
+                this.chests.push([]);
+                this.activeChestIndex = this.chests.length - 1;
+                // Automatisches Speichern
+                this.saveChests();
+            },
+            removeChest(index) {
+                if (confirm('Möchtest du diese Chest wirklich entfernen? Alle Items werden zu den unzugeordneten Gegenständen verschoben.')) {
+                    // Verschiebe alle Items zu den unzugeordneten Items
+                    this.unassignedItems.push(...this.chests[index]);
+                    // Entferne die Chest
+                    this.chests.splice(index, 1);
+                    // Setze den aktiven Index zurück
+                    this.activeChestIndex = 0;
+                    // Automatisches Speichern
+                    this.saveChests();
+                }
+            },
+            saveChests() {
+                axios.post('/save_chests', { chests: this.chests })
+                    .then(response => {
+                        console.log('Änderungen gespeichert');
+                    })
+                    .catch(error => {
+                        console.error('Fehler beim Speichern der Änderungen');
+                    });
+            },
+            openAssignDialog(hash, fromChest = null) {
+                this.itemToAssign = hash;
+                this.itemToAssignFromChest = fromChest;
+                this.assignChestIndex = fromChest !== null ? fromChest : 0;
+                this.showAssignDialog = true;
+            },
+            closeAssignDialog() {
+                this.showAssignDialog = false;
+                this.itemToAssign = null;
+                this.itemToAssignFromChest = null;
+            },
+            assignItemToChest() {
+                const toChest = this.assignChestIndex;
+                if (toChest >= 0 && toChest < this.chests.length) {
+                    // Entferne das Item aus der ursprünglichen Liste
+                    if (this.itemToAssignFromChest === null) {
+                        const index = this.unassignedItems.indexOf(this.itemToAssign);
+                        if (index > -1) {
+                            this.unassignedItems.splice(index, 1);
+                        }
+                    } else {
+                        const index = this.chests[this.itemToAssignFromChest].indexOf(this.itemToAssign);
+                        if (index > -1) {
+                            this.chests[this.itemToAssignFromChest].splice(index, 1);
+                        }
+                    }
+                    // Füge das Item zur Ziel-Chest hinzu
+                    this.chests[toChest].push(this.itemToAssign);
+
+                    // Automatisches Speichern
+                    this.saveChests();
+
+                    // Schließe den Dialog
+                    this.closeAssignDialog();
+                } else {
+                    alert('Ungültiger Chest-Index.');
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>
