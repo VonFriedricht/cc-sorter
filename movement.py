@@ -7,6 +7,8 @@ from PIL import Image
 import numpy as np
 from math import floor
 import json
+import threading
+from pynput import keyboard
 
 kisten_grid = [
     (704, 276), (792, 276), (880, 276), (968, 276), (1056, 276), (1144, 276),
@@ -159,6 +161,46 @@ chests = [
 known_hashes = set()
 for chest in chests:
     known_hashes.update(chest)
+
+terminate = False
+start_script = False
+
+def on_press_start(key):
+    global start_script
+    try:
+        if key.char == 's':
+            start_script = True
+            print('Skript gestartet.')
+            return False  # Stoppt den Listener
+    except AttributeError:
+        pass
+
+def on_press_terminate(key):
+    global terminate
+    try:
+        if key.char == 'p':
+            terminate = True
+            print('Beenden-Taste "P" gedrückt. Skript wird beendet...')
+            return False  # Stoppt den Listener
+    except AttributeError:
+        pass
+
+# Wartet auf den Startbefehl
+print('Drücken Sie "S", um das Skript zu starten...')
+with keyboard.Listener(on_press=on_press_start) as listener:
+    listener.join()
+
+if not start_script:
+    exit()
+
+# Startet den Beenden-Listener in einem separaten Thread
+def start_terminate_listener():
+    with keyboard.Listener(on_press=on_press_terminate) as listener:
+        listener.join()
+
+terminate_thread = threading.Thread(target=start_terminate_listener)
+terminate_thread.daemon = True  # Beendet den Thread, wenn das Hauptprogramm endet
+terminate_thread.start()
 
 def move_down():
     pyautogui.keyDown('s')
@@ -332,12 +374,13 @@ def reload():
         for chest in chests:
             known_hashes.update(chest)
 
-time.sleep(1)
 current = 0
 layers = 13
-while True:
+while not terminate:
     print(len(chests))
-    for i in range(0, layers*3):
+    for i in range(0, layers * 3):
+        if terminate:
+            break
         move_from_to(current, i)
         current = i
         interact()
@@ -347,14 +390,21 @@ while True:
         screenshot(current)
         interact()
 
+    if terminate:
+        break
+
     for i in range(layers*3 - 1, -1, -1):
+        if terminate:
+            break
         move_from_to(current, i)
         current = i
         interact()
         click_sort_button()
         reload()
-        click_sort_button()
         screenshot(current)
+        click_sort_button()
         interact()
         
     time.sleep(10)
+
+print('Skript wurde beendet.')
