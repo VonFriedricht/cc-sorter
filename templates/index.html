@@ -93,6 +93,17 @@
         .chest-navigation span {
             font-weight: bold;
         }
+		.delete-button {
+			background-color: #e74c3c; /* Rote Farbe für Warnung */
+			color: white;
+			border: none;
+			padding: 10px;
+			margin-bottom: 10px;
+			cursor: pointer;
+		}
+		.delete-button:hover {
+			background-color: #c0392b;
+		}
     </style>
 </head>
 <body>
@@ -107,9 +118,10 @@
 
     <!-- Hauptcontainer -->
     <div class="container">
-        <!-- Linke Seite: Unzugeordnete Gegenstände -->
+		<!-- Linke Seite: Unzugeordnete Gegenstände -->
 		<div class="left-panel">
 			<h2>Unzugeordnete Gegenstände</h2>
+			<button @click="deleteUnassignedImages" class="delete-button">Unzugeordnete Bilder löschen</button>
 			<div
 				class="item-container"
 				@dragover.prevent
@@ -125,6 +137,7 @@
 				</div>
 			</div>
 		</div>
+
 
 
 		<!-- Rechte Seite: Ausgewählte Kiste -->
@@ -356,7 +369,25 @@
                 } else {
                     alert('Ungültiger Chest-Index.');
                 }
-            }
+            },
+			deleteUnassignedImages() {
+				if (confirm('Bist du sicher, dass du alle unzugeordneten Bilder löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden.')) {
+					axios.post('/delete_unassigned_images', { hashes: this.unassignedItems })
+						.then(response => {
+							if (response.data.status === 'success') {
+								alert('Unzugeordnete Bilder wurden gelöscht.');
+								// Aktualisiere die unassignedItems
+								this.unassignedItems = [];
+							} else {
+								alert('Es gab ein Problem beim Löschen der Bilder.');
+							}
+						})
+						.catch(error => {
+							console.error('Fehler beim Löschen der unzugeordneten Bilder', error);
+							alert('Es gab ein Problem beim Löschen der Bilder.');
+						});
+				}
+			}
         }
     });
 </script>

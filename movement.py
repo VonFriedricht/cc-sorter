@@ -334,7 +334,7 @@ def reload():
 
 time.sleep(1)
 current = 0
-layers = 10
+layers = 13
 while True:
     print(len(chests))
     for i in range(0, layers*3):
